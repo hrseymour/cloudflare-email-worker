@@ -380,6 +380,22 @@ def show_stats():
     
     print('═' * 60 + '\n')
 
+def populate_cache_silently(email_filter=None, max_emails=100):
+    """Populate the recent emails cache without printing anything"""
+    global _recent_emails_cache
+
+    prefix = f'{email_filter.lower()}/' if email_filter else ''
+    objects = list_objects(prefix)
+
+    # Filter for JSON files only
+    email_files = [obj for obj in objects if obj['Key'].endswith('.json')]
+
+    # Sort by key (which includes timestamp) and take most recent
+    email_files = sorted(email_files, key=lambda x: x['Key'], reverse=True)[:max_emails]
+
+    # Populate cache
+    _recent_emails_cache = [obj['Key'] for obj in email_files]
+
 def main():
     global _recent_emails_cache
     
@@ -445,12 +461,16 @@ Setup:
     
     args = parser.parse_args()
     
-    # Handle numbered --get (need to populate cache first)
+    # Handle numbered --get (populate cache silently with smart loading)
     if args.get and args.get.isdigit():
-        # Need to run recent first to populate cache
-        get_recent_emails(50, args.email)  # Get more to build cache
+        # Smart loading: only load as many as needed, plus a small buffer
+        requested_num = int(args.get)
+        load_count = requested_num + 10  # Buffer of 10 for convenience
+
+        # Silently populate cache without printing
+        populate_cache_silently(args.email, max_emails=load_count)
         
-        index = int(args.get) - 1
+        index = requested_num - 1
         if 0 <= index < len(_recent_emails_cache):
             filename = _recent_emails_cache[index]
             if args.full:
@@ -458,20 +478,24 @@ Setup:
             else:
                 get_email(filename)
         else:
-            print(f"Error: Invalid number {args.get}. Run --recent first to see available emails.", file=sys.stderr)
+            print(f"Error: Invalid number {args.get}. Only {len(_recent_emails_cache)} emails available.", file=sys.stderr)
         return
     
-    # Handle numbered --delete
+    # Handle numbered --delete (populate cache silently with smart loading)
     if args.delete and args.delete.isdigit():
-        # Need to run recent first to populate cache
-        get_recent_emails(50, args.email)
+        # Smart loading: only load as many as needed, plus a small buffer
+        requested_num = int(args.delete)
+        load_count = requested_num + 10  # Buffer of 10 for convenience
+
+        # Silently populate cache without printing
+        populate_cache_silently(args.email, max_emails=load_count)
         
-        index = int(args.delete) - 1
+        index = requested_num - 1
         if 0 <= index < len(_recent_emails_cache):
             filename = _recent_emails_cache[index]
             delete_email(filename)
         else:
-            print(f"Error: Invalid number {args.delete}. Run --recent first to see available emails.", file=sys.stderr)
+            print(f"Error: Invalid number {args.delete}. Only {len(_recent_emails_cache)} emails available.", file=sys.stderr)
         return
     
     # Execute the requested action
